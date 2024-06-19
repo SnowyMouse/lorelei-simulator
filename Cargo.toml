@@ -1,0 +1,11 @@
+[package]
+name = "lorelei-simulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+safeboy = "0.1.2"
+rand = "0.8.5"
+ctrlc = "3.4.4"
+console = "0.15.8"
+clap = { version = "4.5.7", features = ["derive"] }
