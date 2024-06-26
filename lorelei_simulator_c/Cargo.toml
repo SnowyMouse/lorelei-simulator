@@ -1,0 +1,10 @@
+[package]
+name = "lorelei_simulator_c"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lorelei_simulator = { path = "../lorelei_simulator" }
+
+[lib]
+crate-type = ["staticlib"]

@@ -1,0 +1,10 @@
+[package]
+name = "lorelei_simulator_cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+lorelei_simulator = {path = "../lorelei_simulator"}
+ctrlc = "3.4.4"
+console = "0.15.8"
+clap = { version = "4.5.7", features = ["derive"] }

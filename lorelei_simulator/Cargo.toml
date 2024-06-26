@@ -1,0 +1,8 @@
+[package]
+name = "lorelei_simulator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+safeboy = "0.1.2"
+rand = "0.8.5"
