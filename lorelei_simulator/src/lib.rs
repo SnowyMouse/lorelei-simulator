@@ -8,6 +8,8 @@ use std::thread::{JoinHandle};
 use rand::random;
 use safeboy::types::{DirectAccess, Key, Model};
 
+mod data;
+
 #[derive(Copy, Clone)]
 enum Game {
     Yellow,
@@ -291,5 +293,12 @@ fn simulate(inner: Arc<SimulatorInner>) {
         else {
             hm.insert(move_found, 1);
         }
+    }
+}
+
+pub const fn move_name(move_index: u8) -> Option<&'static str> {
+    match data::MoveType::from_u8(move_index) {
+        Some(n) => Some(n.name()),
+        None => None
     }
 }

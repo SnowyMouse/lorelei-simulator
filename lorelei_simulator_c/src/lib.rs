@@ -1,4 +1,6 @@
+use std::ffi::c_char;
 use std::num::NonZeroUsize;
+use std::ptr::null;
 use lorelei_simulator::Simulator;
 
 #[no_mangle]
@@ -71,3 +73,35 @@ pub unsafe extern "C" fn simulator_results(simulator: &Simulator, indices: *mut 
 }
 
 
+#[no_mangle]
+pub extern "C" fn simulator_move_name(index: u8) -> *const c_char {
+    const MOVES: [[u8; 16]; 256] = {
+        use lorelei_simulator::move_name;
+
+        let mut data = [[0u8; 16]; 256];
+        let mut index = 1usize;
+
+        while let Some(n) = move_name(index as u8) {
+            let bytes = n.as_bytes();
+            let mut char = 0usize;
+            loop {
+                if bytes.len() == char {
+                    break;
+                }
+                data[index][char] = bytes[char];
+                char += 1;
+            }
+            index += 1;
+        }
+
+        data
+    };
+
+    let data = &MOVES[index as usize];
+    if data[0] == 0 {
+        null()
+    }
+    else {
+        data.as_ptr() as *const c_char
+    }
+}

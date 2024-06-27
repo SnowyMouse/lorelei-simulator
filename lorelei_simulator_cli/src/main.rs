@@ -8,10 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 use clap::Parser;
 use console::Term;
-use lorelei_simulator::Simulator;
-use crate::data::MoveType;
-
-mod data;
+use lorelei_simulator::{move_name, Simulator};
 
 fn main() {
     #[derive(clap::Parser)]
@@ -128,10 +125,10 @@ fn main() {
 
         let items_str = items.iter().map(|(index, count)| {
             let percent = 100.0 * *count as f64 / sample_size as f64;
-            let Some(move_type) = data::MoveType::from_u8(*index) else {
+            let Some(move_name) = move_name(*index) else {
                 return (Cow::Owned(format!("UNK (0x{index:02X})")), count, percent);
             };
-            (Cow::Borrowed(move_type.name()), count, percent)
+            (Cow::Borrowed(move_name), count, percent)
         });
 
         let mut items_str = items_str.peekable();
@@ -204,7 +201,7 @@ fn main() {
     items.sort_by(|a, b| a.0.cmp(&b.0));
 
     for (m, cnt) in items {
-        let m = MoveType::from_u8(m).map(|m| m.name().to_owned()).unwrap_or(format!("UNK (0x{m:02X})"));
+        let m = move_name(m).map(|m| m.to_owned()).unwrap_or(format!("UNK (0x{m:02X})"));
         let _ = writeln!(writer, "{m:-12} {cnt:8} {:7.2}%", 100.0 * cnt as f64 / sample_size as f64);
     }
 
