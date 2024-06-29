@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle};
 use rand::random;
@@ -92,7 +92,8 @@ impl Simulator {
                 sample_count: AtomicU64::new(0),
                 trials,
                 results: Mutex::new(Default::default()),
-                should_be_running: AtomicBool::new(false),
+                stop: AtomicBool::new(false),
+                running_threads: AtomicUsize::new(0),
                 game,
             }),
             threads: Vec::new()
@@ -100,7 +101,7 @@ impl Simulator {
     }
 
     pub fn is_running(&self) -> bool {
-        self.inner.should_be_running.load(Ordering::Relaxed)
+        self.inner.running_threads.load(Ordering::Relaxed) > 0
     }
 
     pub fn results(&self) -> HashMap<u8, u64> {
@@ -109,9 +110,14 @@ impl Simulator {
 
     pub fn start(&mut self, thread_count: NonZeroUsize) {
         assert!(!self.is_running(), "already running");
+        self.inner.stop.swap(false, Ordering::Relaxed);
         for _ in 0..thread_count.get() {
             let inner_cloned = self.inner.clone();
-            self.threads.push(std::thread::spawn(|| simulate(inner_cloned)))
+            self.inner.running_threads.fetch_add(1, Ordering::Relaxed);
+            self.threads.push(std::thread::spawn(move || {
+                simulate(inner_cloned.clone());
+                inner_cloned.running_threads.fetch_sub(1, Ordering::Relaxed);
+            }))
         }
     }
 
@@ -119,7 +125,7 @@ impl Simulator {
         if !self.is_running() {
             return;
         }
-        self.inner.should_be_running.swap(false, Ordering::Relaxed);
+        self.inner.stop.swap(true, Ordering::Relaxed);
         for t in self.threads.drain(..) {
             let _ = t.join();
         }
@@ -157,7 +163,8 @@ struct SimulatorInner {
     sample_count: AtomicU64,
     trials: Option<u64>,
     results: Mutex<HashMap<u8, u64>>,
-    should_be_running: AtomicBool,
+    running_threads: AtomicUsize,
+    stop: AtomicBool,
     game: Game
 }
 
@@ -252,7 +259,7 @@ fn simulate(inner: Arc<SimulatorInner>) {
         let mut odd_frame = false;
 
         let move_found = loop {
-            if !inner.should_be_running.load(Ordering::Relaxed) {
+            if inner.stop.load(Ordering::Relaxed) {
                 return;
             }
 
