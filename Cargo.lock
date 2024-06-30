@@ -90,6 +90,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
 
 [[package]]
+name = "cc"
+version = "1.0.103"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2755ff20a1d93490d26ba33a6f092a38a508398a5320df5d4b3014fcccce9410"
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -160,6 +166,15 @@ name = "clap_lex"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b82cf0babdbd58558212896d1a4272303a57bdb245c2bf1147185fb45640e70"
+
+[[package]]
+name = "cmake"
+version = "0.1.50"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
+dependencies = [
+ "cc",
+]
 
 [[package]]
 name = "colorchoice"
@@ -478,20 +493,21 @@ dependencies = [
 
 [[package]]
 name = "safeboy"
-version = "0.1.2"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dbc4e2b924d96c9a76b91dda69484e553a90e02e8a008c0e064b2bf7b389092"
+checksum = "429ca1e7205c9809f1549ccd27ef34b52d49612f07e9343fcd3b188d42de1a9b"
 dependencies = [
  "sameboy-sys",
 ]
 
 [[package]]
 name = "sameboy-sys"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cceeba98dfd691f30acafdb0638a2c005b9e5e153cfe33d393b036e9c14b08a"
+checksum = "df4612c53dc5d76ae76b8de22f4efa1db241e2780d7afefadbbdd45cd494a62c"
 dependencies = [
  "bindgen",
+ "cmake",
 ]
 
 [[package]]

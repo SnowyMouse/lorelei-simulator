@@ -133,9 +133,10 @@ fn main() {
 
         let mut items_str = items_str.peekable();
 
+        // If there aren't as many items to display, lower the threshold
         let columns = output.size().1 as u32;
-        let temporary_allowance = (items_str.len().min(4) * 17) as u32;
-        let columns = columns + temporary_allowance;
+        let extra_room = ((4 - items_str.len().min(4)) * 17) as u32;
+        let columns = columns + extra_room;
 
         if columns < 80 {
             while let Some((name, _, percent)) = items_str.next() {
