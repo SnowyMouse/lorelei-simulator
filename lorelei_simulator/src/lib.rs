@@ -88,7 +88,7 @@ impl Simulator {
             inner: Arc::new(SimulatorInner {
                 model,
                 rom,
-                save_state,
+                save_state: Mutex::new(Arc::new(save_state)),
                 sample_count: AtomicU64::new(0),
                 trials,
                 results: Mutex::new(Default::default()),
@@ -104,10 +104,12 @@ impl Simulator {
         self.inner.running_threads.load(Ordering::Relaxed) > 0
     }
 
+    /// Get current results.
     pub fn results(&self) -> HashMap<u8, u64> {
         self.inner.results.lock().unwrap().clone()
     }
 
+    /// Run the simulator with the given thread count.
     pub fn start(&mut self, thread_count: NonZeroUsize) {
         assert!(!self.is_running(), "already running");
         self.inner.stop.swap(false, Ordering::Relaxed);
@@ -159,7 +161,7 @@ impl Display for SimulatorError {
 struct SimulatorInner {
     model: Model,
     rom: Vec<u8>,
-    save_state: Vec<u8>,
+    save_state: Mutex<Arc<Vec<u8>>>,
     sample_count: AtomicU64,
     trials: Option<u64>,
     results: Mutex<HashMap<u8, u64>>,
@@ -237,12 +239,12 @@ fn simulate(inner: Arc<SimulatorInner>) {
         }
     }
 
-    let mut trained = false;
-    let mut last_save_state = inner.save_state.clone();
+    let mut save_state = Arc::clone(&inner.save_state.lock().unwrap());
+    let mut found_best_save_state = false;
 
     loop {
         // We can load to the first instance of the random number generator if possible.
-        gameboy.load_state_from_buffer(&last_save_state).unwrap();
+        gameboy.load_state_from_buffer(&save_state).unwrap();
 
         let rng_hit = Rc::new(AtomicBool::new(false));
         let decision_made = Rc::new(AtomicU8::new(0));
@@ -263,13 +265,16 @@ fn simulate(inner: Arc<SimulatorInner>) {
                 return;
             }
 
-            // We found where the first random() call is!
-            if !trained {
+            if !found_best_save_state {
                 if rng_hit.load(Ordering::Relaxed) {
-                    trained = true;
+                    // We found where the first random() call is!
+                    //
+                    // Cache this for further calls to simulate().
+                    *inner.save_state.lock().unwrap() = save_state.clone();
+                    found_best_save_state = true;
                 }
                 else {
-                    last_save_state = gameboy.read_save_state_to_vec();
+                    save_state = Arc::new(gameboy.read_save_state_to_vec());
                 }
             }
 

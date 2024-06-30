@@ -92,8 +92,9 @@ fn main() {
         };
 
         if !simulator.is_running() {
-            if bailing {
-                println!("Cancelled.");
+            if bailing && sample_size == 0 {
+                output.clear_line().unwrap();
+                println!("Cancelled; no trials recorded in {min}:{sec:02}");
                 return;
             }
             println!("Finished {sample_size} trial{s} in {min}:{sec:02}", s=if sample_size == 1 { "" } else { "s" });

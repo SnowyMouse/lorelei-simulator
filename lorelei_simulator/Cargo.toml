@@ -1,6 +1,9 @@
 [package]
 name = "lorelei_simulator"
 version = "0.1.0"
+description = "Rapidly simulates Pokémon Gen 1-2 AI decisions"
+license = "GPL-3.0-only"
+readme = "../README.md"
 edition = "2021"
 
 [dependencies]
