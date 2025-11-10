@@ -6,11 +6,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{JoinHandle};
 use rand::random;
-use safeboy::types::{DirectAccess, Key, Model};
+use safeboy::*;
 
 mod data;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 enum Game {
     Yellow,
     Red,
@@ -53,19 +53,19 @@ impl Simulator {
         save_state: Vec<u8>,
         trials: Option<u64>
     ) -> Result<Self, SimulatorError> {
-        let Ok(model) = safeboy::Gameboy::model_for_save_state(&save_state) else {
+        let Ok(model) = model_for_save_state(&save_state) else {
             return Err(SimulatorError::SaveStateError);
         };
 
-        let mut gameboy = safeboy::Gameboy::new(model);
-        gameboy.load_rom_from_buffer(&rom);
+        let mut gameboy = Gameboy::new(model);
+        gameboy.load_rom(&rom);
 
-        if gameboy.load_state_from_buffer(&save_state).is_err() {
+        if gameboy.load_save_state(&save_state).is_err() {
             return Err(SimulatorError::SaveStateError);
         }
 
         let title = gameboy.get_rom_title();
-        let game = match title.as_str() {
+        let game = match title {
             "POKEMON YELLOW" => Game::Yellow,
             "POKEMON RED" => Game::Red,
             "POKEMON BLUE" => Game::Blue,
@@ -171,91 +171,99 @@ struct SimulatorInner {
 }
 
 struct Status {
-    gameboy: &'static safeboy::Gameboy,
     rng_hit: Rc<AtomicBool>,
     decision_made: Rc<AtomicU8>,
+    game: Game
 }
 
-fn simulate(inner: Arc<SimulatorInner>) {
-    let mut gameboy = safeboy::Gameboy::new(inner.model);
-    gameboy.load_rom_from_buffer(inner.rom.as_slice());
-    gameboy.set_turbo_mode(true, true);
-    gameboy.set_rendering_disabled(false);
+impl GameboyCallbacks for Status {
+    fn read_memory(&mut self, _instance: &mut RunningGameboy, address: u16, original_data: u8) -> u8 {
+        match self.game {
+            Game::Red | Game::Blue | Game::Yellow => {
+                if address == 0xFFD3 || address == 0xFFD4 {
+                    self.rng_hit.swap(true, Ordering::Relaxed);
+                    return random();
+                }
+                original_data
+            }
+            Game::Gold | Game::Silver => {
+                if address == 0xFFE3 || address == 0xFFE4 {
+                    self.rng_hit.swap(true, Ordering::Relaxed);
+                    return random();
+                }
+                original_data
+            },
+            Game::Crystal => {
+                if address == 0xFFE1 || address == 0xFFE2 {
+                    self.rng_hit.swap(true, Ordering::Relaxed);
+                    return random();
+                }
+                original_data
+            },
+        }
+    }
 
-    macro_rules! make_gen2_rules {
-        ($enemy_current_move_addr:expr, $enemy_current_move_num_addr:expr, $rand_low:expr, $rand_high:expr) => {
-            gameboy.set_write_memory_callback(Some(|status, address, data| -> bool {
-                if address == $enemy_current_move_addr && data != 0 {
-                    let status = status.unwrap().downcast_mut::<Status>().unwrap();
-                    let pc = status.gameboy.get_registers().pc as usize;
+    fn write_memory(&mut self, instance: &mut RunningGameboy, address: u16, data: u8) -> bool {
+        match self.game {
+            Game::Red | Game::Blue | Game::Yellow => {
+                if address == 0xCCDD && data != 0 {
+                    self.decision_made.swap(data, Ordering::Relaxed);
+                }
+                true
+            }
+            Game::Gold | Game::Silver | Game::Crystal => {
+                let (enemy_current_move_addr, enemy_current_move_num_addr) = if self.game == Game::Crystal {
+                    (0xC6E4, 0xC6E9)
+                }
+                else {
+                    (0xCBC2, 0xCBC7)
+                };
+
+                if address == enemy_current_move_addr && data != 0 {
+                    let pc = instance.get_registers().pc as usize;
                     if pc > 0x4000 {
                         let offset = pc - 0x4000;
-                        let (rom, bank) = status.gameboy.get_direct_access(DirectAccess::ROM);
+                        let DirectAccessData { data: rom, bank } = instance.direct_access(DirectAccessRegion::ROM);
                         let rom = &rom[0x4000 * bank as usize..];
-                        let rom = rom.get(offset..offset+6);
-                        let high = ($enemy_current_move_num_addr >> 8) as u8;
-                        let low = ($enemy_current_move_num_addr & 0xFF) as u8;
+                        let rom = rom.get(offset..offset + 6);
+                        let high = (enemy_current_move_num_addr >> 8) as u8;
+                        let low = (enemy_current_move_num_addr & 0xFF) as u8;
 
                         // use a signature so ROM hacks can work provided RAM isn't moved around too much
                         if rom == Some(&[0x79, 0xEA, low, high, 0xC9, 0x91]) {
-                            status.decision_made.swap(data, Ordering::Relaxed);
+                            self.decision_made.swap(data, Ordering::Relaxed);
                         }
                     }
                 }
-                true
-            }));
-            gameboy.set_read_memory_callback(Some(|status, address, data| -> u8 {
-                if address == $rand_low || address == $rand_high {
-                    status.unwrap().downcast_mut::<Status>().unwrap().rng_hit.swap(true, Ordering::Relaxed);
-                    return random();
-                }
-                data
-            }));
-        };
-    }
 
-    match inner.game {
-        Game::Red | Game::Blue | Game::Yellow => {
-            gameboy.set_write_memory_callback(Some(|status, address, data| -> bool {
-                if address == 0xCCDD && data != 0 {
-                    let status = status.unwrap().downcast_mut::<Status>().unwrap();
-                    status.decision_made.swap(data, Ordering::Relaxed);
-                }
                 true
-            }));
-            gameboy.set_read_memory_callback(Some(|status, address, data| -> u8 {
-                if address == 0xFFD3 || address == 0xFFD4 {
-                    status.unwrap().downcast_mut::<Status>().unwrap().rng_hit.swap(true, Ordering::Relaxed);
-                    return random();
-                }
-                data
-            }));
-        },
-        Game::Gold | Game::Silver => {
-            make_gen2_rules!(0xCBC2, 0xCBC7, 0xFFE3, 0xFFE4);
-        }
-        Game::Crystal => {
-            make_gen2_rules!(0xC6E4, 0xC6E9, 0xFFE1, 0xFFE2);
+            }
         }
     }
+}
+
+fn simulate(inner: Arc<SimulatorInner>) {
+    let mut gameboy = Gameboy::new(inner.model);
+    gameboy.load_rom(inner.rom.as_slice());
+    gameboy.set_turbo_mode(TurboMode::Enabled);
+    gameboy.set_memory_callbacks_enabled(true);
 
     let mut save_state = Arc::clone(&inner.save_state.lock().unwrap());
     let mut found_best_save_state = false;
 
     loop {
         // We can load to the first instance of the random number generator if possible.
-        gameboy.load_state_from_buffer(&save_state).unwrap();
+        gameboy.load_save_state(&save_state).unwrap();
 
         let rng_hit = Rc::new(AtomicBool::new(false));
         let decision_made = Rc::new(AtomicU8::new(0));
 
         let memes = Status {
-            gameboy: unsafe { &*(&gameboy as *const _) },
             rng_hit: rng_hit.clone(),
-            decision_made: decision_made.clone()
+            decision_made: decision_made.clone(),
+            game: inner.game
         };
-
-        gameboy.set_user_data(Some(Box::new(memes)));
+        gameboy.set_callbacks(Some(Box::new(memes)));
 
         let mut rapid_fire = 0u8;
         let mut odd_frame = false;
@@ -274,13 +282,13 @@ fn simulate(inner: Arc<SimulatorInner>) {
                     found_best_save_state = true;
                 }
                 else {
-                    save_state = Arc::new(gameboy.read_save_state_to_vec());
+                    save_state = Arc::new(gameboy.create_save_state());
                 }
             }
 
             if odd_frame != gameboy.is_odd_frame() {
                 rapid_fire = (rapid_fire + 1) % 6;
-                gameboy.set_key_state(Key::A, rapid_fire < 3);
+                gameboy.set_input_button_state(InputButton::A, rapid_fire < 3);
                 odd_frame = !odd_frame;
             }
 
